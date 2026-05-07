@@ -15,7 +15,7 @@ pipeline {
     stages {
 
         // ===============================
-        // ✅ INSTALL ALL REQUIRED TOOLS
+        // ✅ SETUP TOOLS (FIXED)
         // ===============================
         stage('Setup Tools') {
             steps {
@@ -40,20 +40,27 @@ pipeline {
                   rm -rf aws awscliv2.zip
                 fi
 
-                # -------------------------
-                # ✅ TERRAFORM (FIXED)
-                # -------------------------
-                echo "==== Installing Terraform ===="
-                wget -q https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
-                unzip -o terraform_1.6.6_linux_amd64.zip
+                aws --version
 
-                # ✅ IMPORTANT FIX (your failure reason)
+                # -------------------------
+                # ✅ TERRAFORM (FINAL FIX)
+                # -------------------------
+                echo "==== Installing Terraform safely ===="
+
+                TMP_DIR=$(mktemp -d)
+                cd $TMP_DIR
+
+                wget -q https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
+                unzip terraform_1.6.6_linux_amd64.zip
+
+                # Remove old binary if exists
                 sudo rm -rf /usr/local/bin/terraform || true
 
-                sudo mv -f terraform /usr/local/bin/
+                sudo mv terraform /usr/local/bin/
                 sudo chmod +x /usr/local/bin/terraform
 
-                rm -f terraform_1.6.6_linux_amd64.zip
+                cd -
+                rm -rf $TMP_DIR
 
                 terraform version || exit 1
 
@@ -79,7 +86,7 @@ pipeline {
 
                 helm version
 
-                echo "==== ✅ All tools ready ===="
+                echo "==== ✅ Tools setup complete ===="
                 '''
             }
         }
@@ -115,7 +122,7 @@ pipeline {
                 CLUSTER_NAME="dev-eks-poc-demo-app-b${BUILD_NUMBER}"
 
                 aws eks update-kubeconfig \
-                  --region ap-south-1 \
+                  --region ${REGION} \
                   --name $CLUSTER_NAME
 
                 kubectl get nodes
@@ -151,7 +158,7 @@ pipeline {
                         error("Demo duration must be between 5 and 60 minutes")
                     }
 
-                    echo "App running for ${duration} minutes ✅"
+                    echo "Application running for ${duration} minutes ✅"
                     sleep time: duration, unit: 'MINUTES'
                 }
             }
@@ -163,8 +170,9 @@ pipeline {
         stage('Validation') {
             steps {
                 sh '''
-                echo "==== Post Validation ===="
-                kubectl get all
+                echo "==== Validation ===="
+                kubectl get pods -A
+                kubectl get svc
                 helm list
                 '''
             }
@@ -172,14 +180,14 @@ pipeline {
     }
 
     // ===============================
-    // ✅ CLEANUP (SAFE DESTROY)
+    // ✅ CLEANUP (SAFE)
     // ===============================
     post {
         always {
             echo "==== Destroying Infrastructure ===="
 
             sh '''
-            set +e   # ✅ IMPORTANT: don't fail pipeline if destroy fails
+            set +e
 
             if command -v terraform >/dev/null 2>&1; then
               cd terraform
