@@ -4,7 +4,7 @@
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
-  
+
   name = "${var.env}-eks-poc-vpc"
 
   cidr = "10.0.0.0/16"
@@ -19,26 +19,18 @@ module "vpc" {
 }
 
 ########################################
-# ✅ EKS MODULE
+# ✅ EKS MODULE (FINAL STABLE VERSION)
 ########################################
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  
   version = "~> 19.0"
-  
+
   cluster_name = local.name_prefix
 
   subnet_ids = module.vpc.private_subnets
   vpc_id     = module.vpc.vpc_id
 
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-
-  create_cloudwatch_log_group = false
-
-  # ✅ Final fixes (critical)
-  create_kms_key            = false
-  cluster_encryption_config = []
+  cluster_endpoint_public_access = true
 
   eks_managed_node_groups = {
     default = {
