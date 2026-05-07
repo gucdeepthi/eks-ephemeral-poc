@@ -1,3 +1,6 @@
+########################################
+# ✅ VPC MODULE (STABLE VERSION)
+########################################
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
@@ -15,9 +18,12 @@ module "vpc" {
   tags = local.common_tags
 }
 
+########################################
+# ✅ EKS MODULE (FIXED + NO KMS CONFLICT)
+########################################
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 19.0"
+  version = "~> 20.0"
 
   cluster_name = local.name_prefix
 
@@ -28,6 +34,9 @@ module "eks" {
   cluster_endpoint_private_access = true
 
   create_cloudwatch_log_group = false
+
+  # ✅ 🔥 CRITICAL FIX — prevents AWS provider conflict
+  create_kms_key = false
 
   eks_managed_node_groups = {
     default = {

@@ -1,3 +1,6 @@
+########################################
+# ✅ TERRAFORM CONFIG (CLEAN + FINAL)
+########################################
 terraform {
   required_version = ">= 1.5.0"
 
@@ -9,6 +12,9 @@ terraform {
   }
 }
 
+########################################
+# ✅ AWS PROVIDER CONFIG
+########################################
 provider "aws" {
   region = "ap-south-1"
 }
