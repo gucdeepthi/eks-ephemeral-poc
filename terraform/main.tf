@@ -1,5 +1,6 @@
 module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
 
   name = "${var.env}-eks-poc-vpc"
 
@@ -26,7 +27,6 @@ module "eks" {
   cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = true
 
-  # avoid CW log errors
   create_cloudwatch_log_group = false
 
   eks_managed_node_groups = {
