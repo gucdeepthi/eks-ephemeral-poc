@@ -98,7 +98,10 @@ pipeline {
             steps {
                 sh '''
                 set -e
-                cd terraform
+                cd terraform			
+				
+				rm -rf .terraform
+				rm -f .terraform.lock.hcl
 
                 terraform init
 
