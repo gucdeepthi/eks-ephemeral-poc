@@ -17,31 +17,28 @@ pipeline {
 
     stages {
 
+        // ===============================
+        // ✅ INSTALL BASE + REQUIRED TOOLS
+        // ===============================
         stage('Check & Install Tools') {
             steps {
                 sh '''
-                echo "==== Checking required tools ===="
+                echo "==== Installing base packages ===="
+                sudo apt update -y
+                sudo apt install -y unzip curl git
 
+                echo "==== Checking AWS CLI ===="
                 if command -v aws >/dev/null 2>&1; then
                   echo "AWS CLI already installed ✅"
                 else
-                  echo "Installing AWS CLI..."
-                  sudo apt update -y
-                  
-				  if command -v aws >/dev/null 2>&1; then
-					echo "AWS CLI already installed ✅"
-				  else
-					echo "Installing AWS CLI v2..."
-
-					curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-					unzip -o awscliv2.zip
-					sudo ./aws/install --update
-
-					rm -rf aws awscliv2.zip
-				  fi				  
-				  
+                  echo "Installing AWS CLI v2..."
+                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                  unzip -o awscliv2.zip
+                  sudo ./aws/install --update
+                  rm -rf aws awscliv2.zip
                 fi
 
+                echo "==== Checking Terraform ===="
                 if command -v terraform >/dev/null 2>&1; then
                   echo "Terraform already installed ✅"
                 else
@@ -52,6 +49,7 @@ pipeline {
                   rm terraform_1.6.6_linux_amd64.zip
                 fi
 
+                echo "==== Checking kubectl ===="
                 if command -v kubectl >/dev/null 2>&1; then
                   echo "kubectl already installed ✅"
                 else
@@ -61,6 +59,7 @@ pipeline {
                   sudo mv kubectl /usr/local/bin/
                 fi
 
+                echo "==== Checking Helm ===="
                 if command -v helm >/dev/null 2>&1; then
                   echo "Helm already installed ✅"
                 else
@@ -77,6 +76,9 @@ pipeline {
             }
         }
 
+        // ===============================
+        // ✅ TERRAFORM APPLY
+        // ===============================
         stage('Terraform Apply') {
             steps {
                 sh '''
@@ -93,6 +95,9 @@ pipeline {
             }
         }
 
+        // ===============================
+        // ✅ CONFIGURE KUBECTL
+        // ===============================
         stage('Configure kubectl') {
             steps {
                 sh '''
@@ -107,6 +112,9 @@ pipeline {
             }
         }
 
+        // ===============================
+        // ✅ HELM DEPLOY
+        // ===============================
         stage('Helm Deploy') {
             steps {
                 sh '''
@@ -116,6 +124,9 @@ pipeline {
             }
         }
 
+        // ===============================
+        // ✅ DEMO WINDOW
+        // ===============================
         stage('Demo Window') {
             steps {
                 script {
@@ -125,12 +136,15 @@ pipeline {
                         error("Demo duration must be between 5 and 60 minutes")
                     }
 
-                    echo "Application live for ${duration} minutes"
+                    echo "Application live for ${duration} minutes ✅"
                     sleep(time: duration, unit: 'MINUTES')
                 }
             }
         }
 
+        // ===============================
+        // ✅ VALIDATION
+        // ===============================
         stage('Post-Run Validation') {
             steps {
                 sh '''
@@ -143,6 +157,9 @@ pipeline {
         }
     }
 
+    // ===============================
+    // ✅ ALWAYS CLEANUP
+    // ===============================
     post {
         always {
             echo "==== Destroying Infrastructure ===="
