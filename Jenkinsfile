@@ -9,69 +9,77 @@ pipeline {
         ENV      = "dev"
         CLIENT   = "demo"
         SERVICE  = "app"
-        BUILD_ID_VAR = "${env.BUILD_NUMBER}"
-        TF_DIR   = "terraform"
-        HELM_DIR = "helm/demo-app"
         REGION   = "ap-south-1"
     }
 
     stages {
 
         // ===============================
-        // ✅ INSTALL BASE + REQUIRED TOOLS
+        // ✅ INSTALL ALL REQUIRED TOOLS
         // ===============================
-        stage('Check & Install Tools') {
+        stage('Setup Tools') {
             steps {
                 sh '''
-                echo "==== Installing base packages ===="
-                sudo apt update -y
-                sudo apt install -y unzip curl git
+                set -e
 
+                echo "==== Installing base packages ===="
+                sudo apt-get update -y
+                sudo apt-get install -y unzip curl git wget
+
+                # -------------------------
+                # ✅ AWS CLI
+                # -------------------------
                 echo "==== Checking AWS CLI ===="
                 if command -v aws >/dev/null 2>&1; then
-                  echo "AWS CLI already installed ✅"
+                  echo "AWS CLI already exists ✅"
                 else
                   echo "Installing AWS CLI v2..."
-                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                  curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
                   unzip -o awscliv2.zip
                   sudo ./aws/install --update
                   rm -rf aws awscliv2.zip
                 fi
 
-                echo "==== Checking Terraform ===="
-                if command -v terraform >/dev/null 2>&1; then
-                  echo "Terraform already installed ✅"
-                else
-                  echo "Installing Terraform..."
-                  wget -q https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
-                  unzip -o terraform_1.6.6_linux_amd64.zip
-                  sudo mv terraform /usr/local/bin/
-                  rm terraform_1.6.6_linux_amd64.zip
-                fi
+                # -------------------------
+                # ✅ TERRAFORM (FIXED)
+                # -------------------------
+                echo "==== Installing Terraform ===="
+                wget -q https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
+                unzip -o terraform_1.6.6_linux_amd64.zip
 
-                echo "==== Checking kubectl ===="
-                if command -v kubectl >/dev/null 2>&1; then
-                  echo "kubectl already installed ✅"
-                else
-                  echo "Installing kubectl..."
-                  curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+                # ✅ IMPORTANT FIX (your failure reason)
+                sudo rm -rf /usr/local/bin/terraform || true
+
+                sudo mv -f terraform /usr/local/bin/
+                sudo chmod +x /usr/local/bin/terraform
+
+                rm -f terraform_1.6.6_linux_amd64.zip
+
+                terraform version || exit 1
+
+                # -------------------------
+                # ✅ KUBECTL
+                # -------------------------
+                echo "==== Installing kubectl ===="
+                if ! command -v kubectl >/dev/null 2>&1; then
+                  curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
                   chmod +x kubectl
                   sudo mv kubectl /usr/local/bin/
                 fi
 
-                echo "==== Checking Helm ===="
-                if command -v helm >/dev/null 2>&1; then
-                  echo "Helm already installed ✅"
-                else
-                  echo "Installing Helm..."
-                  curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                kubectl version --client
+
+                # -------------------------
+                # ✅ HELM
+                # -------------------------
+                echo "==== Installing Helm ===="
+                if ! command -v helm >/dev/null 2>&1; then
+                  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
                 fi
 
-                echo "==== Tool Versions ===="
-                aws --version
-                terraform version
-                kubectl version --client
                 helm version
+
+                echo "==== ✅ All tools ready ===="
                 '''
             }
         }
@@ -82,15 +90,16 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 sh '''
+                set -e
                 cd terraform
 
                 terraform init
 
                 terraform apply -auto-approve \
-                -var="env=dev" \
-                -var="client=demo" \
-                -var="service=app" \
-                -var="build_id=${BUILD_NUMBER}"
+                  -var="env=dev" \
+                  -var="client=demo" \
+                  -var="service=app" \
+                  -var="build_id=${BUILD_NUMBER}"
                 '''
             }
         }
@@ -101,6 +110,8 @@ pipeline {
         stage('Configure kubectl') {
             steps {
                 sh '''
+                set -e
+
                 CLUSTER_NAME="dev-eks-poc-demo-app-b${BUILD_NUMBER}"
 
                 aws eks update-kubeconfig \
@@ -118,8 +129,12 @@ pipeline {
         stage('Helm Deploy') {
             steps {
                 sh '''
+                set -e
+
                 helm upgrade --install demo-app helm/demo-app \
-                -f helm/demo-app/values-dev.yaml
+                  -f helm/demo-app/values-dev.yaml
+
+                kubectl get pods
                 '''
             }
         }
@@ -136,8 +151,8 @@ pipeline {
                         error("Demo duration must be between 5 and 60 minutes")
                     }
 
-                    echo "Application live for ${duration} minutes ✅"
-                    sleep(time: duration, unit: 'MINUTES')
+                    echo "App running for ${duration} minutes ✅"
+                    sleep time: duration, unit: 'MINUTES'
                 }
             }
         }
@@ -145,12 +160,11 @@ pipeline {
         // ===============================
         // ✅ VALIDATION
         // ===============================
-        stage('Post-Run Validation') {
+        stage('Validation') {
             steps {
                 sh '''
-                echo "==== Validation ===="
-                kubectl get pods -A
-                kubectl get svc
+                echo "==== Post Validation ===="
+                kubectl get all
                 helm list
                 '''
             }
@@ -158,20 +172,26 @@ pipeline {
     }
 
     // ===============================
-    // ✅ ALWAYS CLEANUP
+    // ✅ CLEANUP (SAFE DESTROY)
     // ===============================
     post {
         always {
             echo "==== Destroying Infrastructure ===="
 
             sh '''
-            cd terraform
+            set +e   # ✅ IMPORTANT: don't fail pipeline if destroy fails
 
-            terraform destroy -auto-approve \
-              -var="env=dev" \
-              -var="client=demo" \
-              -var="service=app" \
-              -var="build_id=${BUILD_NUMBER}"
+            if command -v terraform >/dev/null 2>&1; then
+              cd terraform
+
+              terraform destroy -auto-approve \
+                -var="env=dev" \
+                -var="client=demo" \
+                -var="service=app" \
+                -var="build_id=${BUILD_NUMBER}"
+            else
+              echo "Terraform not found, skipping destroy"
+            fi
             '''
         }
     }
