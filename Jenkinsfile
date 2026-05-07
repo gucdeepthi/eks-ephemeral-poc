@@ -27,7 +27,19 @@ pipeline {
                 else
                   echo "Installing AWS CLI..."
                   sudo apt update -y
-                  sudo apt install -y awscli
+                  
+				  if command -v aws >/dev/null 2>&1; then
+					echo "AWS CLI already installed ✅"
+				  else
+					echo "Installing AWS CLI v2..."
+
+					curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+					unzip -o awscliv2.zip
+					sudo ./aws/install --update
+
+					rm -rf aws awscliv2.zip
+				  fi				  
+				  
                 fi
 
                 if command -v terraform >/dev/null 2>&1; then
