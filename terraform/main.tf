@@ -1,5 +1,5 @@
 ########################################
-# ✅ VPC MODULE
+# VPC MODULE
 ########################################
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -19,7 +19,7 @@ module "vpc" {
 }
 
 ########################################
-# ✅ EKS MODULE (FINAL STABLE VERSION)
+# EKS MODULE (STABLE FIXED VERSION)
 ########################################
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
