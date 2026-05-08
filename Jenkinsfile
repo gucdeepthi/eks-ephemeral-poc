@@ -197,6 +197,23 @@ pipeline {
 
 						echo "***** ✅ Helm Deployment Success *****"
 
+						echo "***** Waiting for Pod to be Running *****"
+
+						for i in {1..10}; do
+						  STATUS=$(kubectl get pods -l app=demo-app -o jsonpath="{.items[0].status.phase}" 2>/dev/null)
+
+						  if [ "$STATUS" = "Running" ]; then
+							echo "✅ Pod is running"
+							break
+						  fi
+
+						  echo "Waiting for pod... attempt $i"
+						  sleep 10
+						done
+
+						echo "***** FINAL POD STATUS *****"
+						kubectl get pods -o wide
+
 						echo "***** Starting Port Forward *****"
 						kubectl port-forward --address 0.0.0.0 svc/demo-app 9090:80 &
 
