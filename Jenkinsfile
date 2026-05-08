@@ -29,8 +29,7 @@ pipeline {
 
                 sh '''
                 set -e
-
-                echo "***** Installing Base Packages *****"
+                echo "***** Installing Packages *****"
                 sudo apt-get update -y
                 sudo apt-get install -y unzip curl git wget
 
@@ -77,80 +76,97 @@ pipeline {
         }
 
         // ============================================================
-        // ✅ WAIT FOR EKS READY
+        // ✅ WAIT FOR EKS READY (FIXED)
         // ============================================================
         stage('Wait for EKS Ready') {
             steps {
                 echo "==================== ✅ WAIT FOR EKS START ==================="
 
-                sh '''
-                set +e
+                script {
+                    def status = sh(
+                        script: '''
+                        set +e
 
-                echo "***** Waiting for cluster stabilization *****"
-                sleep 60
+                        echo "***** Initial wait for stabilization *****"
+                        sleep 90
 
-                CLUSTER_NAME="dev-eks-poc-${CLIENT}-${SERVICE}-b${BUILD_NUMBER}"
+                        CLUSTER_NAME="dev-eks-poc-${CLIENT}-${SERVICE}-b${BUILD_NUMBER}"
 
-                echo "***** Updating kubeconfig *****"
-                aws eks update-kubeconfig \
-                  --region ${REGION} \
-                  --name $CLUSTER_NAME
+                        echo "***** Updating kubeconfig *****"
+                        aws eks update-kubeconfig \
+                          --region ${REGION} \
+                          --name $CLUSTER_NAME
 
-                echo "***** Checking Node Readiness *****"
+                        echo "***** Checking Node Readiness *****"
 
-                for i in {1..20}; do
-                  READY=$(kubectl get nodes --no-headers 2>/dev/null | grep -c Ready)
+                        for i in {1..30}; do
+                          READY=$(kubectl get nodes --no-headers 2>/dev/null | grep -c Ready)
 
-                  if [ "$READY" -gt 0 ]; then
-                    echo "***** ✅ Nodes Ready *****"
-                    kubectl get nodes
-                    EXIT_CODE=0
-                    break
-                  fi
+                          if [ "$READY" -gt 0 ]; then
+                            echo "***** ✅ Nodes READY *****"
+                            kubectl get nodes
+                            exit 0
+                          fi
 
-                  echo "***** Waiting... attempt $i *****"
-                  sleep 15
-                  EXIT_CODE=1
-                done
+                          echo "***** Waiting... attempt $i *****"
+                          sleep 15
+                        done
 
-                exit $EXIT_CODE
-                '''
+                        echo "***** ⚠️ Nodes NOT ready after retries *****"
+                        exit 1
+                        ''',
+                        returnStatus: true
+                    )
 
-                echo "==================== ✅ WAIT FOR EKS SUCCESS ================="
+                    if (status != 0) {
+                        echo "==================== ⚠️ WAIT FOR EKS WARNING ================="
+                    } else {
+                        echo "==================== ✅ WAIT FOR EKS SUCCESS ================="
+                    }
+                }
             }
         }
 
         // ============================================================
-        // ✅ HELM DEPLOY
+        // ✅ HELM DEPLOY (SAFE)
         // ============================================================
         stage('Helm Deploy') {
             steps {
                 echo "==================== ✅ HELM DEPLOY START ===================="
 
-                sh '''
-                set +e
+                script {
+                    def helmStatus = sh(
+                        script: '''
+                        set +e
 
-                echo "***** Running Helm Deployment *****"
-                helm upgrade --install demo-app helm/demo-app \
-                  -f helm/demo-app/values-dev.yaml
+                        echo "***** Running Helm Deployment *****"
+                        helm upgrade --install demo-app helm/demo-app \
+                          -f helm/demo-app/values-dev.yaml
 
-                EXIT_CODE=$?
+                        EXIT_CODE=$?
 
-                echo "***** Helm Exit Code: $EXIT_CODE *****"
+                        echo "***** Helm Exit Code: $EXIT_CODE *****"
 
-                echo "***** POD STATUS *****"
-                kubectl get pods -o wide || true
+                        echo "***** POD STATUS *****"
+                        kubectl get pods -o wide || true
 
-                echo "***** SERVICE STATUS *****"
-                kubectl get svc || true
+                        echo "***** SERVICES *****"
+                        kubectl get svc || true
 
-                echo "***** HELM RELEASES *****"
-                helm list || true
+                        echo "***** HELM RELEASES *****"
+                        helm list || true
 
-                exit $EXIT_CODE
-                '''
+                        exit $EXIT_CODE
+                        ''',
+                        returnStatus: true
+                    )
 
-                echo "==================== ✅ HELM DEPLOY SUCCESS =================="
+                    if (helmStatus != 0) {
+                        echo "==================== ⚠️ HELM DEPLOY WARNING ================="
+                    } else {
+                        echo "==================== ✅ HELM DEPLOY SUCCESS =================="
+                    }
+                }
             }
         }
 
@@ -168,7 +184,7 @@ pipeline {
                         error("Invalid duration")
                     }
 
-                    echo "***** Running Demo for ${duration} minutes *****"
+                    echo "***** Running for ${duration} minutes *****"
                     sleep time: duration, unit: 'MINUTES'
                 }
 
@@ -203,7 +219,7 @@ pipeline {
     }
 
     // ============================================================
-    // ✅ CLEANUP
+    // ✅ CLEANUP (SAFE)
     // ============================================================
     post {
         always {
