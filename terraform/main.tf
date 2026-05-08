@@ -16,6 +16,8 @@ module "vpc" {
   enable_nat_gateway = false   # FIXED (avoid cost + failure)
   single_nat_gateway = false
   
+  map_public_ip_on_launch = true
+  
   tags = local.common_tags
 }
 
