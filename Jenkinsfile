@@ -175,7 +175,7 @@ pipeline {
 
 						echo "***** Running Helm Deployment *****"
 						helm upgrade --install demo-app helm/demo-app \
-						  -f helm/demo-app/values-dev.yaml
+						  -f helm/demo-app/values.yaml
 
 						EXIT_CODE=$?
 
