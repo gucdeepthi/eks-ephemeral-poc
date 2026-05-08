@@ -2,8 +2,9 @@ replicaCount: 1
 
 image:
   repository: nginx
-  tag: latest
+  tag: "1.25.3"   # ✅ fixed (no latest)
+  pullPolicy: IfNotPresent
 
 service:
-  type: LoadBalancer
+  type: ClusterIP   # ✅ changed (important fix)
   port: 80
