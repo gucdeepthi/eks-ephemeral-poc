@@ -1,11 +1,8 @@
 pipeline {
-
-echo "Pipeline started..."
-
     agent any
 
     parameters {
-        string(name: 'DEMO_DURATION_MIN', defaultValue: '5', description: 'Demo duration (5–60 minutes)')
+        string(name: 'DEMO_DURATION_MIN', defaultValue: '5', description: '5–60 minutes')
     }
 
     environment {
@@ -17,17 +14,24 @@ echo "Pipeline started..."
 
     stages {
 
+        stage('Start') {
+            steps {
+                echo "===================================== | ✅ PIPELINE STARTED | ====================================="
+            }
+        }
+
         // ===============================
         // ✅ SETUP TOOLS
         // ===============================
         stage('Setup Tools') {
             steps {
+                echo "===================================== | ✅ SETUP TOOLS       | ====================================="
+
                 sh '''
                 set -e
                 sudo apt-get update -y
                 sudo apt-get install -y unzip curl git wget
 
-                # AWS CLI
                 if ! command -v aws >/dev/null 2>&1; then
                   curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
                   unzip -o awscliv2.zip
@@ -35,7 +39,6 @@ echo "Pipeline started..."
                   rm -rf aws awscliv2.zip
                 fi
 
-                # Terraform
                 TMP_DIR=$(mktemp -d)
                 cd $TMP_DIR
                 wget -q https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
@@ -47,14 +50,12 @@ echo "Pipeline started..."
 
                 terraform version
 
-                # kubectl
                 if ! command -v kubectl >/dev/null 2>&1; then
-                  curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+                  curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
                   chmod +x kubectl
                   sudo mv kubectl /usr/local/bin/
                 fi
 
-                # helm
                 if ! command -v helm >/dev/null 2>&1; then
                   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
                 fi
@@ -67,6 +68,8 @@ echo "Pipeline started..."
         // ===============================
         stage('Terraform Apply') {
             steps {
+                echo "===================================== | ✅ TERRAFORM APPLY   | ====================================="
+
                 sh '''
                 set -e
                 cd terraform
@@ -84,28 +87,27 @@ echo "Pipeline started..."
             }
         }
 
-        // ✅ NEW STAGE (CRITICAL FIX)
+        // ===============================
+        // ✅ WAIT FOR EKS READY
+        // ===============================
         stage('Wait for EKS Ready') {
             steps {
-                sh '''
-                echo "Waiting for EKS cluster to stabilize..."
+                echo "===================================== | ✅ WAIT FOR EKS READY | ====================================="
 
+                sh '''
                 sleep 60
 
-                echo "Updating kubeconfig..."
                 CLUSTER_NAME="dev-eks-poc-${CLIENT}-${SERVICE}-b${BUILD_NUMBER}"
 
                 aws eks update-kubeconfig \
                   --region ${REGION} \
                   --name $CLUSTER_NAME
 
-                echo "Waiting for nodes..."
-
                 for i in {1..20}; do
-                  READY_NODES=$(kubectl get nodes --no-headers 2>/dev/null | grep -c " Ready")
+                  READY=$(kubectl get nodes --no-headers 2>/dev/null | grep -c Ready)
 
-                  if [ "$READY_NODES" -gt 0 ]; then
-                    echo "✅ Nodes are ready"
+                  if [ "$READY" -gt 0 ]; then
+                    echo "✅ Nodes ready"
                     kubectl get nodes
                     exit 0
                   fi
@@ -115,7 +117,6 @@ echo "Pipeline started..."
                 done
 
                 echo "❌ Nodes not ready"
-                kubectl get nodes || true
                 exit 1
                 '''
             }
@@ -126,9 +127,10 @@ echo "Pipeline started..."
         // ===============================
         stage('Helm Deploy') {
             steps {
+                echo "===================================== | ✅ HELM DEPLOY       | ====================================="
+
                 sh '''
                 set -e
-
                 helm upgrade --install demo-app helm/demo-app \
                   -f helm/demo-app/values-dev.yaml
 
@@ -142,14 +144,16 @@ echo "Pipeline started..."
         // ===============================
         stage('Demo Window') {
             steps {
+                echo "===================================== | ✅ DEMO WINDOW       | ====================================="
+
                 script {
                     int duration = params.DEMO_DURATION_MIN.toInteger()
 
                     if (duration < 5 || duration > 60) {
-                        error("Demo duration must be between 5 and 60 minutes")
+                        error("Duration must be 5–60 minutes")
                     }
 
-                    echo "Application running for ${duration} minutes ✅"
+                    echo "Running for ${duration} minutes..."
                     sleep time: duration, unit: 'MINUTES'
                 }
             }
@@ -160,6 +164,8 @@ echo "Pipeline started..."
         // ===============================
         stage('Validation') {
             steps {
+                echo "===================================== | ✅ VALIDATION        | ====================================="
+
                 sh '''
                 kubectl get pods -A
                 kubectl get svc
@@ -170,11 +176,11 @@ echo "Pipeline started..."
     }
 
     // ===============================
-    // ✅ CLEANUP (SAFE DESTROY)
+    // ✅ CLEANUP
     // ===============================
     post {
         always {
-            echo "==== Destroying Infrastructure ===="
+            echo "===================================== | ✅ CLEANUP (DESTROY) | ====================================="
 
             sh '''
             set +e
@@ -192,11 +198,14 @@ echo "Pipeline started..."
 
               echo "Terraform exit code: $EXIT_CODE"
 
-              exit 0
-            else
-              echo "Terraform not found, skipping destroy"
-              exit 0
+              if [ $EXIT_CODE -eq 0 ]; then
+                echo "✅ Destroy successful"
+              else
+                echo "⚠️ Destroy had warnings"
+              fi
             fi
+
+            exit 0
             '''
         }
     }
