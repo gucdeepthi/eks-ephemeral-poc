@@ -52,28 +52,43 @@ pipeline {
         // ============================================================
         // ✅ TERRAFORM APPLY
         // ============================================================
-        stage('Terraform Apply') {
-            steps {
-                echo "==================== ✅ TERRAFORM APPLY START ================"
+		stage('Terraform Apply') {
+			steps {
+				echo "==================== ✅ TERRAFORM APPLY START ================"
 
-                sh '''
-                set -e
-                cd terraform
+				script {
+					def tfStatus = sh(
+						script: '''
+						set +e
+						cd terraform
 
-                echo "***** Terraform Init *****"
-                terraform init
+						echo "***** Terraform Init *****"
+						terraform init
 
-                echo "***** Terraform Apply *****"
-                terraform apply -auto-approve \
-                  -var="env=${ENV}" \
-                  -var="client=${CLIENT}" \
-                  -var="service=${SERVICE}" \
-                  -var="build_id=${BUILD_NUMBER}"
-                '''
+						echo "***** Terraform Apply *****"
+						terraform apply -auto-approve \
+						  -var="env=${ENV}" \
+						  -var="client=${CLIENT}" \
+						  -var="service=${SERVICE}" \
+						  -var="build_id=${BUILD_NUMBER}"
 
-                echo "==================== ✅ TERRAFORM APPLY SUCCESS =============="
-            }
-        }
+						EXIT_CODE=$?
+						echo "***** Terraform Exit Code: $EXIT_CODE *****"
+
+						exit $EXIT_CODE
+						''',
+						returnStatus: true
+					)
+
+					if (tfStatus != 0) {
+						echo "==================== ❌ TERRAFORM APPLY FAILED ================"
+						error("Stopping pipeline due to Terraform failure")  // ✅ controlled stop
+					} else {
+						echo "==================== ✅ TERRAFORM APPLY SUCCESS =============="
+					}
+				}
+			}
+		}
 
         // ============================================================
         // ✅ WAIT FOR EKS READY (FIXED)
@@ -243,7 +258,7 @@ pipeline {
               echo "***** Terraform Exit Code: $EXIT_CODE *****"
 
               if [ $EXIT_CODE -eq 0 ]; then
-                echo "***** ✅ Destroy SUCCESS *****"
+                echo "***** ✅ DESSTROY SUCCESS *****"
               else
                 echo "***** ⚠️ Destroy completed with warnings *****"
               fi
