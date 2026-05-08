@@ -164,24 +164,59 @@ pipeline {
         // ============================================================
         // ✅ HELM DEPLOY
         // ============================================================
-        stage('Helm Deploy') {
-            steps {
-                echo "==================== ✅ HELM DEPLOY START ===================="
+		stage('Helm Deploy') {
+			steps {
+				echo "==================== ✅ HELM DEPLOY START ===================="
 
-                sh '''
-                set +e
+				script {
+					def helmStatus = sh(
+						script: '''
+						set +e
 
-                helm upgrade --install demo-app helm/demo-app \
-                  -f helm/demo-app/values-dev.yaml
+						echo "***** Running Helm Deployment *****"
+						helm upgrade --install demo-app helm/demo-app \
+						  -f helm/demo-app/values-dev.yaml
 
-                kubectl get pods -o wide || true
-                kubectl get svc || true
-                helm list || true
-                '''
+						EXIT_CODE=$?
 
-                echo "==================== ✅ HELM DEPLOY DONE ====================="
-            }
-        }
+						echo "***** Helm Exit Code: $EXIT_CODE *****"
+
+						echo "***** POD STATUS *****"
+						kubectl get pods -o wide || true
+
+						echo "***** SERVICES *****"
+						kubectl get svc || true
+
+						echo "***** HELM RELEASES *****"
+						helm list || true
+
+						if [ $EXIT_CODE -ne 0 ]; then
+						  echo "***** ❌ Helm Deployment Failed *****"
+						  exit $EXIT_CODE
+						fi
+
+						echo "***** ✅ Helm Deployment Success *****"
+
+						echo "***** Starting Port Forward *****"
+						kubectl port-forward --address 0.0.0.0 svc/demo-app 9090:80 &
+
+						echo "******** Demo Application URL ********"
+						echo "http://<EC2-PUBLIC-IP>:9090"
+
+						sleep 10
+						''',
+						returnStatus: true
+					)
+
+					if (helmStatus != 0) {
+						echo "==================== ❌ HELM DEPLOY FAILED ===================="
+						error("Stopping pipeline due to Helm failure")
+					} else {
+						echo "==================== ✅ HELM DEPLOY SUCCESS =================="
+					}
+				}
+			}
+		}
 
         // ============================================================
         // ✅ DEMO WINDOW
