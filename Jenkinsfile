@@ -1,4 +1,7 @@
 pipeline {
+
+echo "Pipeline started..."
+
     agent any
 
     parameters {
