@@ -16,7 +16,7 @@ pipeline {
 
         stage('Start') {
             steps {
-                echo "===================================== | ✅ PIPELINE STARTED           | ====================================="
+                echo "==================== ✅ PIPELINE STARTED ===================="
             }
         }
 
@@ -25,24 +25,28 @@ pipeline {
         // ============================================================
         stage('Setup Tools') {
             steps {
-                echo "===================================== | ✅ SETUP TOOLS START          | ====================================="
+                echo "==================== ✅ SETUP TOOLS START ===================="
 
                 sh '''
                 set -e
 
+                echo "***** Installing Base Packages *****"
                 sudo apt-get update -y
                 sudo apt-get install -y unzip curl git wget
 
+                echo "***** Checking AWS CLI *****"
                 if ! command -v aws >/dev/null 2>&1; then
                   curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
                   unzip -o awscliv2.zip
                   sudo ./aws/install --update
                 fi
+                aws --version
 
+                echo "***** Terraform Version *****"
                 terraform version || true
                 '''
 
-                echo "===================================== | ✅ SETUP TOOLS SUCCESS        | ====================================="
+                echo "==================== ✅ SETUP TOOLS SUCCESS =================="
             }
         }
 
@@ -51,13 +55,16 @@ pipeline {
         // ============================================================
         stage('Terraform Apply') {
             steps {
-                echo "===================================== | ✅ TERRAFORM APPLY START      | ====================================="
+                echo "==================== ✅ TERRAFORM APPLY START ================"
 
                 sh '''
                 set -e
                 cd terraform
 
+                echo "***** Terraform Init *****"
                 terraform init
+
+                echo "***** Terraform Apply *****"
                 terraform apply -auto-approve \
                   -var="env=${ENV}" \
                   -var="client=${CLIENT}" \
@@ -65,7 +72,7 @@ pipeline {
                   -var="build_id=${BUILD_NUMBER}"
                 '''
 
-                echo "===================================== | ✅ TERRAFORM APPLY SUCCESS    | ====================================="
+                echo "==================== ✅ TERRAFORM APPLY SUCCESS =============="
             }
         }
 
@@ -74,30 +81,34 @@ pipeline {
         // ============================================================
         stage('Wait for EKS Ready') {
             steps {
-                echo "===================================== | ✅ WAIT FOR EKS START         | ====================================="
+                echo "==================== ✅ WAIT FOR EKS START ==================="
 
                 sh '''
                 set +e
 
+                echo "***** Waiting for cluster stabilization *****"
                 sleep 60
 
                 CLUSTER_NAME="dev-eks-poc-${CLIENT}-${SERVICE}-b${BUILD_NUMBER}"
 
+                echo "***** Updating kubeconfig *****"
                 aws eks update-kubeconfig \
                   --region ${REGION} \
                   --name $CLUSTER_NAME
+
+                echo "***** Checking Node Readiness *****"
 
                 for i in {1..20}; do
                   READY=$(kubectl get nodes --no-headers 2>/dev/null | grep -c Ready)
 
                   if [ "$READY" -gt 0 ]; then
-					echo "===================================== | ✅ Nodes are ready        | ====================================="                    
+                    echo "***** ✅ Nodes Ready *****"
                     kubectl get nodes
                     EXIT_CODE=0
                     break
                   fi
 
-                  echo "======================Waiting... attempt $i=================="
+                  echo "***** Waiting... attempt $i *****"
                   sleep 15
                   EXIT_CODE=1
                 done
@@ -105,7 +116,7 @@ pipeline {
                 exit $EXIT_CODE
                 '''
 
-                echo "===================================== | ✅ WAIT FOR EKS SUCCESS       | ====================================="
+                echo "==================== ✅ WAIT FOR EKS SUCCESS ================="
             }
         }
 
@@ -114,31 +125,32 @@ pipeline {
         // ============================================================
         stage('Helm Deploy') {
             steps {
-                echo "===================================== | ✅ HELM DEPLOY START          | ====================================="
+                echo "==================== ✅ HELM DEPLOY START ===================="
 
                 sh '''
                 set +e
 
+                echo "***** Running Helm Deployment *****"
                 helm upgrade --install demo-app helm/demo-app \
                   -f helm/demo-app/values-dev.yaml
 
                 EXIT_CODE=$?
 
-                echo "====================Helm Exit Code: $EXIT_CODE=================="
+                echo "***** Helm Exit Code: $EXIT_CODE *****"
 
-                echo "********************* PODS ***********************"
+                echo "***** POD STATUS *****"
                 kubectl get pods -o wide || true
 
-                echo "******************* SERVICES *********************"
+                echo "***** SERVICE STATUS *****"
                 kubectl get svc || true
 
-                echo "******************* HELM LIST ********************"
+                echo "***** HELM RELEASES *****"
                 helm list || true
 
                 exit $EXIT_CODE
                 '''
 
-                echo "===================================== | ✅ HELM DEPLOY SUCCESS        | ====================================="
+                echo "==================== ✅ HELM DEPLOY SUCCESS =================="
             }
         }
 
@@ -147,7 +159,7 @@ pipeline {
         // ============================================================
         stage('Demo Window') {
             steps {
-                echo "===================================== | ✅ DEMO WINDOW START          | ====================================="
+                echo "==================== ✅ DEMO WINDOW START ===================="
 
                 script {
                     int duration = params.DEMO_DURATION_MIN.toInteger()
@@ -156,11 +168,11 @@ pipeline {
                         error("Invalid duration")
                     }
 
-                    echo "Running for ${duration} minutes..."
+                    echo "***** Running Demo for ${duration} minutes *****"
                     sleep time: duration, unit: 'MINUTES'
                 }
 
-                echo "===================================== | ✅ DEMO WINDOW SUCCESS        | ====================================="
+                echo "==================== ✅ DEMO WINDOW SUCCESS =================="
             }
         }
 
@@ -169,23 +181,23 @@ pipeline {
         // ============================================================
         stage('Validation') {
             steps {
-                echo "===================================== | ✅ VALIDATION START           | ====================================="
+                echo "==================== ✅ VALIDATION START ====================="
 
                 sh '''
-                echo "****************** ALL PODS *****************"
+                echo "***** ALL PODS *****"
                 kubectl get pods -A -o wide
 
-                echo "****************** SERVICES *****************"
+                echo "***** SERVICES *****"
                 kubectl get svc
 
-                echo "******************* NODES *******************"
+                echo "***** NODES *****"
                 kubectl get nodes
 
-                echo "*************** HELM RELEASES ***************"
+                echo "***** HELM RELEASES *****"
                 helm list
                 '''
 
-                echo "===================================== | ✅ VALIDATION SUCCESS         | ====================================="
+                echo "==================== ✅ VALIDATION SUCCESS ==================="
             }
         }
     }
@@ -195,7 +207,7 @@ pipeline {
     // ============================================================
     post {
         always {
-            echo "===================================== | ✅ CLEANUP START              | ====================================="
+            echo "==================== ✅ CLEANUP START ========================"
 
             sh '''
             set +e
@@ -203,6 +215,7 @@ pipeline {
             if command -v terraform >/dev/null 2>&1; then
               cd terraform
 
+              echo "***** Terraform Destroy *****"
               terraform destroy -auto-approve \
                 -var="env=${ENV}" \
                 -var="client=${CLIENT}" \
@@ -211,19 +224,19 @@ pipeline {
 
               EXIT_CODE=$?
 
-              echo "*********** Terraform Exit Code: $EXIT_CODE*************"
+              echo "***** Terraform Exit Code: $EXIT_CODE *****"
 
               if [ $EXIT_CODE -eq 0 ]; then
-                echo "✅ Destroy successful"
+                echo "***** ✅ Destroy SUCCESS *****"
               else
-                echo "⚠️ Destroy completed with warnings"
+                echo "***** ⚠️ Destroy completed with warnings *****"
               fi
             fi
 
             exit 0
             '''
 
-            echo "===================================== | ✅ CLEANUP COMPLETED          | ====================================="
+            echo "==================== ✅ CLEANUP COMPLETED ===================="
         }
     }
 }
