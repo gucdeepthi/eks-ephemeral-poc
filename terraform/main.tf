@@ -30,7 +30,7 @@ module "eks" {
   cluster_name = local.name_prefix
   cluster_version = "1.29"
 
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = module.vpc.public_subnets   #changed to public instead of Private as enable_nat_gateway is False
   vpc_id     = module.vpc.vpc_id
 
   cluster_endpoint_public_access = true  
