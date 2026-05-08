@@ -203,7 +203,7 @@ pipeline {
 						echo "******** Demo Application URL ********"
 						echo "http://<EC2-PUBLIC-IP>:9090"
 
-						sleep 10
+						sleep 60
 						''',
 						returnStatus: true
 					)
